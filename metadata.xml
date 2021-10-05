@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+    <name>reHUD</name>
+    <directory>rehud</directory>
+    <id>1906405707</id>
+    <description>Adds a more customizable smaller version of the &quot;Extra Hud&quot;, which displays the gametime and a list of collected items on the screen.
+
+[h1]Features[/h1]
+- [b]Display your last collected items on the screen[/b]. over 100 of them instead of the last 10 in the normal game
+- [b]Customize the display[/b]: Position (Right, Bottom), Amount of Coloumns, Size, Transparency,... (Requires [url=https://steamcommunity.com/sharedfiles/filedetails/?id=1603631350]Mod Config Menu[/url]!)
+- [b]Display a more accurate ingame Timer![/b] Precise up to milliseconds ;)
+- [b]Filter your items[/b]. Display Passives or only Familiars.
+- [b]Sort your items[/b]. Order them by the floor they are collected on. 
+
+[h1][b]Disable &quot;Extra HUD&quot; in the Options menu when using this mod [/b][/h1]
+
+
+[h1]You need [url=https://steamcommunity.com/sharedfiles/filedetails/?id=1603631350]&quot;Mod config Menu&quot;[/url] to customize this mod![/h1]
+
+[b]This mod does [u]not[/u] disable achievements![/b]
+
+
+[h1]Special Thanks[/h1]
+to Piber for the Mod config menu!
+to Skojanza for helping me bugfix this mod</description>
+    <version>1.7</version>
+    <visibility>Public</visibility>
+    <tag id="Lua"/>
+    <tag id="Items"/>
+    <tag id="Tweaks"/>
+    <tag id="Graphics"/>
+</metadata>
