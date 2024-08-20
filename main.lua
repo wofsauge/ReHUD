@@ -337,7 +337,6 @@ local function getItems()
     end
 end
 
--- TODO: Update stage name if trinket is gulped
 local function getTrinkets()
     local player = Isaac.GetPlayer(0)
 
@@ -385,7 +384,6 @@ function ReHUD:OnGameStart(isSave)
         spriteTable = {}
 
         if (ReHUD.SavedData["collected"] == nil) then
-            print("ReHud: HasData reached, Collected was null")
             ReHUD.SavedData["collected"] = {}
         end
 
