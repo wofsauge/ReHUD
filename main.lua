@@ -54,10 +54,13 @@ local function leadingZero(val)
     end
     return val
 end
-local function hasValue(tab, val, isItem)
+local function hasValue(tab, val, isItem, count)
     for index, value in ipairs(tab) do
         if (isItem == (value["Type"] ~= ItemType.ITEM_TRINKET)) and (value["Id"] == val) then
-            return true
+            if (not isItem) then return true end
+            if (count == value["Count"]) then
+                return true
+            end
         end
     end
     return false
@@ -285,13 +288,14 @@ local function getFloorName()
     return stageName
 end
 
-local function addCollectibleToList(collectibleType, id)
+local function addCollectibleToList(collectibleType, id, count)
     local stageName = getFloorName()
 
     local entry = {
         ["Type"] = collectibleType,
         ["Id"] = id,
-        ["Floor"] = stageName
+        ["Floor"] = stageName,
+        ["Count"] = count
     }
 
     table.insert(ReHUD.SavedData["collected"], entry)
@@ -299,8 +303,18 @@ local function addCollectibleToList(collectibleType, id)
         ["Type"] = collectibleType,
         ["Id"] = id,
         ["Floor"] = stageName,
+        ["Count"] = count,
         ["Sprite"] = getSprite(entry)
     })
+end
+
+local function updateCollectibleInList(index, oldItem, count)
+    -- remove old data
+    table.remove(ReHUD.SavedData["collected"], index)
+    tableRemove(spriteTable, oldItem)
+
+    -- readd with new floor name
+    addCollectibleToList(oldItem["Type"], oldItem["Id"], count)
 end
 
 local function getItems()
@@ -326,8 +340,8 @@ local function getItems()
     for i = 1, maxIDs do
         local collectible = Config:GetCollectible(i)
         if collectible ~= nil then
-            if player:HasCollectible(i) and player:GetCollectibleNum(i) > 0 and not hasValue(ReHUD.SavedData["collected"], i, true) then
-                addCollectibleToList(collectible.Type, i)
+            if player:HasCollectible(i) and player:GetCollectibleNum(i) > 0 and not hasValue(ReHUD.SavedData["collected"], i, true, player:GetCollectibleNum(i)) then
+                addCollectibleToList(collectible.Type, i, player:GetCollectibleNum(i))
                 foundCount = foundCount + 1
             end
             if foundCount == player:GetCollectibleCount() then
@@ -351,8 +365,8 @@ local function getTrinkets()
     -- Add trinkets if not already in list
     for i = 1, maxTrinketIDs do
         if Config:GetTrinket(i) ~= nil then
-            if player:HasTrinket(i, true) and not hasValue(ReHUD.SavedData["collected"], i, false) then
-                addCollectibleToList(ItemType.ITEM_TRINKET, i)
+            if player:HasTrinket(i, true) and not hasValue(ReHUD.SavedData["collected"], i, false, 1) then
+                addCollectibleToList(ItemType.ITEM_TRINKET, i, 1)
             end
         end
     end
@@ -361,12 +375,7 @@ local function getTrinkets()
     local currentFloor = getFloorName()
     for index, value in ipairs(ReHUD.SavedData["collected"]) do
         if (value["Type"] == ItemType.ITEM_TRINKET) and (value["Floor"] ~= currentFloor) and (not isGulpedTrinket(value)) then
-            -- remove old data
-            table.remove(ReHUD.SavedData["collected"], index)
-            tableRemove(spriteTable, value)
-
-            -- readd with new floor name
-            addCollectibleToList(ItemType.ITEM_TRINKET, value["Id"])
+            updateCollectibleInList(index, value, 1)
         end
     end
 end
