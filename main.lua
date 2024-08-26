@@ -18,7 +18,7 @@ reHUDConfig={
     ["showActive"]=false,
     ["showTimer"]=true,
     ["showGulpedTrinkets"]=true,
-    ["showHeldTrinkets"]=true,
+    ["showHeldTrinkets"]=false,
     ["showItems"]=true,
     ["showFloor"]=true
 }
@@ -54,11 +54,11 @@ local function leadingZero(val)
     end
     return val
 end
-local function hasValue(tab, val, isItem, count)
+local function hasValue(tab, val, isItem, count, player)
     for index, value in ipairs(tab) do
         if (isItem == (value["Type"] ~= ItemType.ITEM_TRINKET)) and (value["Id"] == val) then
-            if (not isItem) then return true end
-            if (count == value["Count"]) then
+            if (not isItem and player == value["Player"]) then return true end
+            if (count == value["Count"] and player == value["Player"]) then
                 return true
             end
         end
@@ -117,8 +117,11 @@ local function tableRemove(t, item)
     end
 end
 
-local function isGulpedTrinket(trinket)
-    local player = Isaac.GetPlayer(0)
+local function isGulpedTrinket(trinket, playerId)
+    if not REPENTANCE then return false end
+    local player = Isaac.GetPlayer(playerId)
+    if player == nil then return false end
+
     local isGulped = true
 
     for i = 0, player:GetMaxTrinkets(), 1 do
@@ -138,7 +141,7 @@ local function getItemConfig(item)
     elseif (item["Type"] == ItemType.ITEM_ACTIVE and reHUDConfig["showActive"]) then
         return Config:GetCollectible(item["Id"])
     elseif (item["Type"] == ItemType.ITEM_TRINKET) then
-        local isGulped = isGulpedTrinket(item["Id"])
+        local isGulped = isGulpedTrinket(item["Id"], item["Player"])
         if (isGulped and reHUDConfig["showGulpedTrinkets"]) then return Config:GetTrinket(item["Id"]) end
         if (not isGulped and reHUDConfig["showHeldTrinkets"]) then return Config:GetTrinket(item["Id"]) end
     end
@@ -201,9 +204,8 @@ end
 local function onRender(t)
     if reHUDConfig["disable"] then return end
     local bottomLeft = Vector(0,GetScreenSize().Y)
-    local topRight= Vector(GetScreenSize().X,0)
+    local topRight = Vector(GetScreenSize().X, 0)
     local paused = ""
-    local player = Isaac.GetPlayer(0)
 
     if reHUDConfig["showTimer"] then
         if game:IsPaused() then paused = "Paused!" end
@@ -216,59 +218,102 @@ local function onRender(t)
         fontTimer:DrawStringScaled(paused.." "..timestring, GetScreenCenter().X-fontTimer:GetStringWidth(paused.." 00:00:00.00")/2, 5, 1, 1, KColor(1,1,1,reHUDConfig["transparency"],0,0,0), 0, false)
     end
 
-    if reHUDConfig["showItems"] and #spriteTable > 0 then
-        local counter = 1
-        local lastFloor = ""
-        local padding = Vector(0,0)
+    local playerWithItems = {}
+    local numPlayerWithItems = 0
+    for i, v in ipairs(ReHUD.SavedData["collected"]) do
+        local found = false
+        if playerWithItems[v["Player"]] then
+            found = true
+        end
+        if (not found) then
+            playerWithItems[v["Player"]] = 1
+            numPlayerWithItems = numPlayerWithItems + 1
+        end
+    end
+
+    local columns = math.floor(reHUDConfig["columns"] / numPlayerWithItems)
+
+    if reHUDConfig["showItems"] and #spriteTable > 0 and numPlayerWithItems > 0 then
+        local highestCounter = 1
+        local padding = Vector(0, 0)
         local renderedFloors = {}
 
         for i = #spriteTable, 1, -1 do
             item = spriteTable[i]
 
             local itemConfig = getItemConfig(item)
-
-            if itemConfig ~= nil then
-                local position = Vector(50,50)
+            if itemConfig then
+                local position = Vector(50, 50)
                 if reHUDConfig["showFloor"] then
+                    -- Render stage name
                     if not isInFloorTable(renderedFloors, item["Floor"]) then
-                        if (counter-1) % reHUDConfig["columns"] ~= 0 and counter ~= 1 then
-                            counter = counter + reHUDConfig["columns"]-(counter-1)%reHUDConfig["columns"]
+                        for i = 0, numPlayerWithItems-1 do
+                            if (playerWithItems[i] and playerWithItems[i] > highestCounter) then
+                                highestCounter = playerWithItems[i]
+                            end
                         end
 
-                        local namePosition = topRight+Vector((sclSprWidth/2-sclSprWidth*reHUDConfig["columns"]),mapPadding+sclSprWidth*math.floor((counter-1)/reHUDConfig["columns"]))+Vector(-sclSprWidth/2,-sclSprWidth/2-2+padding.Y)
+                        if (highestCounter - 1) % columns ~= 0 and highestCounter ~= 1 then
+                            highestCounter = highestCounter + columns - (highestCounter-1) % columns
+                        end
+
+                        for i = 0, numPlayerWithItems-1 do
+                            playerWithItems[i] = highestCounter
+                        end
+
+                        local namePosition = topRight + Vector((sclSprWidth/2 - sclSprWidth * reHUDConfig["columns"]), mapPadding + sclSprWidth * math.floor((highestCounter-1)/columns)) + Vector(-sclSprWidth/2, (-sclSprWidth/2) - 2 + padding.Y)
 
                         if reHUDConfig["position"] == 2 then
                             namePosition = bottomLeft+Vector(trinketPadding+sclSprWidth*math.floor((counter-1)/reHUDConfig["columns"]),(sclSprWidth/2-sclSprWidth*reHUDConfig["columns"]))+Vector(2+padding.X,-sclSprWidth)
-                            if counter==1 then namePosition= namePosition-Vector(sclSprWidth/2,0) end
+                            if counter == 1 then namePosition = namePosition - Vector(sclSprWidth / 2, 0) end
                         end
 
-                        -- render Floorname
-                        fontFloorName:DrawStringScaled(item["Floor"], namePosition.X, namePosition.Y, reHUDConfig["textScale"], reHUDConfig["textScale"], KColor(1, 1, 1, reHUDConfig["transparency"], 0, 0,0 ), 0, false)
+                        -- render stage name
+                        fontFloorName:DrawStringScaled(item["Floor"], namePosition.X, namePosition.Y, reHUDConfig["textScale"], reHUDConfig["textScale"], KColor(1, 1, 1, reHUDConfig["transparency"], 0, 0, 0), 0, false)
                         table.insert(renderedFloors, item["Floor"])
 
                         if reHUDConfig["position"] == 1 then
-                            padding = padding + Vector(0, sclSprWidth/2)
+                            padding = padding + Vector(0, sclSprWidth / 2)
                         elseif reHUDConfig["position"] == 2 and counter ~= 1 then
-                            padding = padding + Vector(sclSprWidth/2, 0)
+                            padding = padding + Vector(sclSprWidth / 2, 0)
+                        end
+
+                        -- Render separator for multiplayer
+                        if numPlayerWithItems > 1 then
+                            itemSprite = item["Sprite"]
+                            if itemSprite then
+                                itemSprite.Color = Color(1, 1, 1, reHUDConfig["transparency"], 0, 0, 0)
+                                itemSprite.Scale = Vector(0.05, math.floor((highestCounter-1)/columns))
+                                itemSprite:Render(Vector(topRight.X - (sclSprWidth * columns), namePosition.Y + reHUDConfig["textScale"]))
+                            end
                         end
                     end
 
-                    if reHUDConfig["position"] == 1 then -- under minimap
-                        -- center of sprite moved coloumn count to left      moved current slot right                         minimap height + spritescale* number of rows
-                        position = topRight+Vector((sclSprWidth/2-sclSprWidth*reHUDConfig["columns"])+sclSprWidth*((counter-1)%reHUDConfig["columns"]),mapPadding+sclSprWidth*math.floor((counter-1)/reHUDConfig["columns"]))
-                    elseif reHUDConfig["position"]==2 then -- bottom of screen
-                        position = bottomLeft+Vector(trinketPadding+sclSprWidth*math.floor((counter-1)/reHUDConfig["columns"]),(sclSprWidth/2-sclSprWidth*reHUDConfig["columns"])+sclSprWidth*((counter-1)%reHUDConfig["columns"]))
+                    -- Render collectibles
+                    if reHUDConfig["position"] == 1 then
+                        -- furthest left
+                        local xStart = (sclSprWidth / 2) - (sclSprWidth * (reHUDConfig["columns"] / (item["Player"] + 1)))
+
+                        -- get offset based on columns available
+                        local xColumnOffset = sclSprWidth * math.floor((playerWithItems[item["Player"]] - 1) % columns)
+
+                        local posX = xStart + xColumnOffset
+                        local posY = mapPadding + sclSprWidth * math.floor((playerWithItems[item["Player"]] - 1) / columns)
+                        position = topRight + Vector(posX, posY)
+
+                    elseif reHUDConfig["position"] == 2 then -- bottom of screen
+                        position = bottomLeft+Vector(trinketPadding+sclSprWidth*math.floor((counter-1)/reHUDConfig["columns"]), (sclSprWidth/2-sclSprWidth*reHUDConfig["columns"])+sclSprWidth*((counter-1)%reHUDConfig["columns"]))
                     end
 
                     itemSprite = item["Sprite"]
-                    if (itemSprite ~= nil) then
+                    if itemSprite then
                         itemSprite.Color = Color(1, 1, 1, reHUDConfig["transparency"], 0, 0, 0)
                         itemSprite.Scale = Vector(reHUDConfig["spriteScale"], reHUDConfig["spriteScale"])
-                        itemSprite:Render(position+padding, Vector(0, 0), Vector(0, 0))
+                        itemSprite:Render(position + padding, Vector(0, 0), Vector(0, 0))
                     end
 
-                    if counter == calcMaxDisplay() then return end
-                    counter = counter + 1
+                    if highestCounter == calcMaxDisplay() then return end
+                    playerWithItems[item["Player"]] = playerWithItems[item["Player"]] + 1
                 end
             end
         end
@@ -288,12 +333,13 @@ local function getFloorName()
     return stageName
 end
 
-local function addCollectibleToList(collectibleType, id, count)
+local function addCollectibleToList(collectibleType, id, count, player)
     local stageName = getFloorName()
 
     local entry = {
         ["Type"] = collectibleType,
         ["Id"] = id,
+        ["Player"] = player,
         ["Floor"] = stageName,
         ["Count"] = count
     }
@@ -302,61 +348,58 @@ local function addCollectibleToList(collectibleType, id, count)
     table.insert(spriteTable, {
         ["Type"] = collectibleType,
         ["Id"] = id,
+        ["Player"] = player,
         ["Floor"] = stageName,
         ["Count"] = count,
         ["Sprite"] = getSprite(entry)
     })
 end
 
-local function updateCollectibleInList(index, oldItem, count)
+local function updateCollectibleInList(index, oldItem, count, player)
     -- remove old data
     table.remove(ReHUD.SavedData["collected"], index)
     tableRemove(spriteTable, oldItem)
 
     -- readd with new floor name
-    addCollectibleToList(oldItem["Type"], oldItem["Id"], count)
+    addCollectibleToList(oldItem["Type"], oldItem["Id"], count, player)
 end
 
-local function getItems()
-    local player = Isaac.GetPlayer(0)
+local function getItems(playerId)
+    local player = Isaac.GetPlayer(playerId)
+    if player == nil then return end
+    local foundCount = 0
 
     -- Remove items no longer in possession
-    local foundCount=0
     for index, value in ipairs(ReHUD.SavedData["collected"]) do
         if (value["Type"] ~= ItemType.ITEM_TRINKET) and player:HasCollectible(value["Id"]) and player:GetCollectibleNum(value["Id"]) > 0 then
             foundCount = foundCount + 1
         else
-            if (value["Type"] ~= ItemType.ITEM_TRINKET) then
+            if (value["Type"] ~= ItemType.ITEM_TRINKET) and (value["Player"] == playerId) then
                 table.remove(ReHUD.SavedData["collected"], index)
                 tableRemove(spriteTable, value)
             end
         end
-    end
-    if foundCount == player:GetCollectibleCount() then
-        return
     end
 
     -- Add items if not already in list
     for i = 1, maxIDs do
         local collectible = Config:GetCollectible(i)
         if collectible ~= nil then
-            if player:HasCollectible(i) and player:GetCollectibleNum(i) > 0 and not hasValue(ReHUD.SavedData["collected"], i, true, player:GetCollectibleNum(i)) then
-                addCollectibleToList(collectible.Type, i, player:GetCollectibleNum(i))
-                foundCount = foundCount + 1
-            end
-            if foundCount == player:GetCollectibleCount() then
-                break
+            if player:HasCollectible(i) and player:GetCollectibleNum(i) > 0 and not hasValue(ReHUD.SavedData["collected"], i, true, player:GetCollectibleNum(i), playerId) then
+                addCollectibleToList(collectible.Type, i, player:GetCollectibleNum(i), playerId)
             end
         end
     end
 end
 
-local function getTrinkets()
-    local player = Isaac.GetPlayer(0)
+local function getTrinkets(playerId)
+    if not REPENTANCE then return end
+    local player = Isaac.GetPlayer(playerId)
+    if player == nil then return end
 
     -- Remove trinkets no longer in possession
     for index, value in ipairs(ReHUD.SavedData["collected"]) do
-        if (value["Type"] == ItemType.ITEM_TRINKET) and (not player:HasTrinket(value["Id"])) then
+        if (value["Type"] == ItemType.ITEM_TRINKET) and (not player:HasTrinket(value["Id"]) and (value["Player"] == playerId)) then
             table.remove(ReHUD.SavedData["collected"], index)
             tableRemove(spriteTable, value)
         end
@@ -365,8 +408,8 @@ local function getTrinkets()
     -- Add trinkets if not already in list
     for i = 1, maxTrinketIDs do
         if Config:GetTrinket(i) ~= nil then
-            if player:HasTrinket(i, true) and not hasValue(ReHUD.SavedData["collected"], i, false, 1) then
-                addCollectibleToList(ItemType.ITEM_TRINKET, i, 1)
+            if player:HasTrinket(i, true) and not hasValue(ReHUD.SavedData["collected"], i, false, 1, 0) then
+                addCollectibleToList(ItemType.ITEM_TRINKET, i, 1, 0)
             end
         end
     end
@@ -374,8 +417,8 @@ local function getTrinkets()
     -- Update floor value for held trinkets
     local currentFloor = getFloorName()
     for index, value in ipairs(ReHUD.SavedData["collected"]) do
-        if (value["Type"] == ItemType.ITEM_TRINKET) and (value["Floor"] ~= currentFloor) and (not isGulpedTrinket(value)) then
-            updateCollectibleInList(index, value, 1)
+        if (value["Type"] == ItemType.ITEM_TRINKET) and (value["Floor"] ~= currentFloor) and (not isGulpedTrinket(value, playerId)) then
+            updateCollectibleInList(index, value, 1, 0)
         end
     end
 end
@@ -401,6 +444,7 @@ function ReHUD:OnGameStart(isSave)
             table.insert(spriteTable, {
                 ["Type"] = value["Type"],
                 ["Id"] = value["Id"],
+                ["Player"] = value["Player"],
                 ["Floor"] = value["Floor"],
                 ["Sprite"] = getSprite(value)
             })
@@ -413,8 +457,10 @@ function ReHUD:OnGameStart(isSave)
         spriteTable = {}
 
         -- Load current data
-        getItems()
-        getTrinkets()
+        for i = 0, game:GetNumPlayers()-1 do
+            getItems(i)
+            getTrinkets(i)
+        end
     end
 
     isGameStarted = true
@@ -424,8 +470,10 @@ ReHUD:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, ReHUD.OnGameStart)
 --Saving Moddata--
 function ReHUD:updateItems()
     if isGameStarted then
-        getItems()
-        getTrinkets()
+        for i = 0, game:GetNumPlayers()-1 do
+            getItems(i)
+            getTrinkets(i)
+        end
     end
 end
 ReHUD:AddCallback(ModCallbacks.MC_POST_PLAYER_UPDATE, ReHUD.updateItems)
